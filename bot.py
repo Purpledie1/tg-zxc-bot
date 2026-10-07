@@ -6,6 +6,7 @@ import random
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
+from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
@@ -52,15 +53,23 @@ ZXC_MESSAGES = [
 ]
 
 def load_users() -> set:
-    """Загружает список ID пользователей из файла."""
+    """Загружает список ID пользователей из файла и переменных окружения."""
+    users = set()
+    env_users = os.getenv("DEFAULT_USER_IDS", "")
+    if env_users:
+        for uid in env_users.split(","):
+            uid = uid.strip()
+            if uid.isdigit():
+                users.add(int(uid))
+
     if os.path.exists(USERS_FILE):
         try:
             with open(USERS_FILE, "r", encoding="utf-8") as f:
-                return set(json.load(f))
+                file_users = json.load(f)
+                users.update(file_users)
         except (json.JSONDecodeError, IOError) as e:
             logging.error(f"Ошибка при чтении users.json: {e}")
-            return set()
-    return set()
+    return users
 
 def save_users(users: set):
     """Сохраняет список ID пользователей в файл."""
@@ -115,6 +124,32 @@ async def send_good_morning():
         except Exception as e:
             logging.error(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
 
+async def start_web_server():
+    """Запускает мини веб-сервер активности для бесплатных хостингов (Render, Koyeb и др.)."""
+    port_str = os.getenv("PORT")
+    if not port_str:
+        return None
+    try:
+        port = int(port_str)
+    except ValueError:
+        logging.warning(f"Некорректный PORT: {port_str}")
+        return None
+
+    app = web.Application()
+
+    async def ping_handler(request):
+        return web.Response(text="Bot is running! ZXC King active.")
+
+    app.router.add_get("/", ping_handler)
+    app.router.add_get("/health", ping_handler)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logging.info(f"Веб-сервер активности запущен на 0.0.0.0:{port}")
+    return runner
+
 async def main():
     if not BOT_TOKEN or BOT_TOKEN == "your_telegram_bot_token_here":
         logging.error("Не задан BOT_TOKEN.")
@@ -126,10 +161,14 @@ async def main():
     
     logging.info("Бот запущен и планировщик активирован (рассылка в 07:00 Иркутск).")
 
+    web_runner = await start_web_server()
+
     # Запускаем поллинг
     try:
         await dp.start_polling(bot)
     finally:
+        if web_runner:
+            await web_runner.cleanup()
         await bot.session.close()
 
 if __name__ == "__main__":
