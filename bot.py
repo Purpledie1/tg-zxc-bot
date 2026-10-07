@@ -98,6 +98,11 @@ async def cmd_test(message: types.Message):
     msg = random.choice(ZXC_MESSAGES)
     await message.answer(msg)
 
+@dp.message(F.text.lower() == "привет")
+async def cmd_hello(message: types.Message):
+    """Обработчик приветствия."""
+    await message.answer("Я ZXC КОРОЛЬ 1000-7 GHOUL NO SLEEP повеливаю тебе АПНИ ПТСЫ!!")
+
 async def send_good_morning():
     """Функция для рассылки рандомного утреннего сообщения всем пользователям."""
     users_to_notify = load_users()
